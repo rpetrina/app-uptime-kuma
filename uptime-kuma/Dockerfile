@@ -61,6 +61,13 @@ RUN \
 # Copy root filesystem
 COPY rootfs /
 
+# Copy the runtime init script
+COPY run.sh /run.sh
+RUN chmod a+x /run.sh
+
+# Set the command to execute your runtime script instead of the app directly
+CMD [ "/run.sh" ]
+
 # Build arguments
 ARG BUILD_DATE
 ARG BUILD_DESCRIPTION
