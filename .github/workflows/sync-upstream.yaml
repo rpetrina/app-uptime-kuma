@@ -1,0 +1,48 @@
+---
+name: Upstream Sync
+# yamllint disable-line rule:truthy
+on:
+  schedule:
+    - cron: 0 0 * * * # Run once every day at midnight to check for updates
+  workflow_dispatch: # Allows you to manually click "Run workflow" anytime
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: 📂 Checkout Your Forked Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Pull full history to perform a proper git merge
+      - name: 🔄 Configure Git Credentials
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41182845+github-actions[bot]@users.noreply.github.com"
+      - name: 🔍 Add Upstream Remote and Fetch
+        run: |
+          # Connect Frenck's repo as the official "upstream" source code node
+          git remote add upstream https://github.com/hassio-addons/app-uptime-kuma
+          git fetch upstream main
+      - name: 🔀 Merge Upstream Code Into Your Repository
+        id: merge_step
+        run: |-
+          # Capture the commit fingerprint BEFORE attempting to pull down changes
+          BEFORE_SHA=$(git rev-parse HEAD)
+          echo "Attempting to merge upstream/main..."
+          # The "ours" strategy option dynamically resolves conflicts by favoring your config overrides
+          if git merge upstream/main -m "merge: Sync up to upstream stable codebase" -X ours; then
+              AFTER_SHA=$(git rev-parse HEAD)
+              if [ "$BEFORE_SHA" != "$AFTER_SHA" ]; then
+                  echo "New updates found and merged cleanly!"
+                  echo "has_updates=true" >> $GITHUB_OUTPUT
+                  git push origin main
+              else
+                  echo "Already completely up to date with upstream."
+                  echo "has_updates=false" >> $GITHUB_OUTPUT
+              fi
+          else
+              echo "Fatal Git conflict encountered during automated codebase merge!"
+              exit 1
+          fi
