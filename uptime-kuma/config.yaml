@@ -19,6 +19,10 @@ environment:
   UPTIME_KUMA_DISABLE_FRAME_SAMEORIGIN: "true"
   DOCKER_TLS_DIR_PATH: "/data/docker-tls"
   NODE_EXTRA_CA_CERTS: "/data/docker-tls/fullchain.pem"
+options:
+  SERVER_HOSTNAME: ""
+schema:
+  SERVER_HOSTNAME: str
 map:
   - ssl:ro
 hassio_api: true
