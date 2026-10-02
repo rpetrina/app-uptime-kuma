@@ -1,7 +1,7 @@
 ---
-name: Uptime Kuma
+name: Uptime Kuma Local
 version: dev
-slug: uptime-kuma
+slug: uptime
 description: It is a self-hosted monitoring tool like "Uptime Robot"
 url: https://github.com/hassio-addons/app-uptime-kuma
 webui: http://[HOST]:[PORT:3001]
@@ -11,6 +11,21 @@ arch:
   - amd64
 ports:
   3001/tcp: 3001
+watchdog: "http://[HOST]:[PORT:3001]"
+host_network: true
+startup: application
+boot: auto
+environment:
+  UPTIME_KUMA_DISABLE_FRAME_SAMEORIGIN: "true"
+  DOCKER_TLS_DIR_PATH: "/data/docker-tls"
+  NODE_EXTRA_CA_CERTS: "/data/docker-tls/fullchain.pem"
+map:
+  - type: addon_config
+    path: /app
+    read_only: true
+hassio_api: true
+hassio_role: admin
+docker_api: true
 ports_description:
   3001/tcp: Web interface
 discovery:
