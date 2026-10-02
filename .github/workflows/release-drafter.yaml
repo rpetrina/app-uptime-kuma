@@ -1,16 +1,89 @@
 ---
 name: Release Drafter
-
 # yamllint disable-line rule:truthy
 on:
   push:
-    branches:
-      - main
-
+    branches: [main]
 permissions:
   contents: write
   pull-requests: read
-
 jobs:
-  workflows:
-    uses: hassio-addons/workflows/.github/workflows/release-drafter.yaml@e0c532a7b0fb264b3ff0c718c2c0308a0c8c1390 # v4.0.0
+  get-upstream-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔍 Fetch Latest Upstream Stable Release Tag
+        id: upstream_version
+        uses: oprypin/find-latest-tag@v1
+        with:
+          repository: hassio-addons/app-uptime-kuma
+          releases-only: true
+      - name: Format tag
+        id: format_tag
+        run: |
+          echo "External repo version is ${{ steps.upstream_version.outputs.tag }}"
+          # Get the raw tag from the previous step
+          RAW_VERSION="${{ steps.upstream_version.outputs.tag }}"
+
+          # Strip the leading 'v' if it exists
+          CLEAN_VERSION="${RAW_VERSION#v}"
+
+          # Save it to the GitHub Actions output parameter
+          echo "tag=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
+      - name: 📂 Checkout Your Forked Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Pull full history to perform a proper git merge
+      - name: 🔄 Configure Git Credentials
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41182845+github-actions[bot]@users.noreply.github.com"
+      - name: 🔍 Add Upstream Remote and Fetch
+        run: |
+          # Connect Frenck's repo as the official "upstream" source code node
+          git remote add upstream https://github.com/hassio-addons/app-uptime-kuma
+          git fetch upstream main
+      - name: 🔀 Merge Upstream Code Into Your Repository
+        id: merge_step
+        run: |
+          # Capture the commit fingerprint BEFORE attempting to pull down changes
+          BEFORE_SHA=$(git rev-parse HEAD)
+          echo "Attempting to merge upstream/main..."
+          # The "ours" strategy option dynamically resolves conflicts by favoring your config overrides
+          if git merge upstream/main -m "merge: Sync up to upstream stable codebase" -X ours; then
+              AFTER_SHA=$(git rev-parse HEAD)
+              if [ "$BEFORE_SHA" != "$AFTER_SHA" ]; then
+                  echo "New updates found and merged cleanly!"
+                  echo "has_updates=true" >> $GITHUB_OUTPUT
+                  git push origin main
+              else
+                  echo "Already completely up to date with upstream."
+                  echo "has_updates=false" >> $GITHUB_OUTPUT
+              fi
+          else
+              echo "Fatal Git conflict encountered during automated codebase merge!"
+              exit 1
+          fi
+      - name: Update YAML Version Templates
+        run: |
+          # 1. Define your dynamic value (e.g., combining run number or a variable)
+          DYNAMIC_VERSION=${{ steps.format_tag.outputs.tag }}
+
+          # 2. Update the version-template value and the HA config.
+          sed -i 's/^version-template:.*/version-template: '"$DYNAMIC_VERSION"'/' .github/release-drafter.yml
+          sed -i "s/^version:.*/version: $DYNAMIC_VERSION/" ./uptime-kuma/config.yaml
+
+          # 3. (Optional) Verify the changes printed to the log
+          cat .github/release-drafter.yml
+          echo "---------------------------------------------"
+          cat ./uptime-kuma/config.yaml
+  update_release_draft:
+    name: ✏️ Draft release
+    needs: get-upstream-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🚀 Run Release Drafter
+        uses: release-drafter/release-drafter@34d80673e067bdc0c24568d3af899c216adcfaa9 # v7.7.0
+        with:
+          config-name: release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

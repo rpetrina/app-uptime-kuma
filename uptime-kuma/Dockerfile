@@ -1,4 +1,4 @@
-ARG BUILD_FROM=ghcr.io/hassio-addons/base:21.0.7
+ARG BUILD_FROM=ghcr.io/hassio-addons/base:21.0.8
 # hadolint ignore=DL3006
 FROM ${BUILD_FROM}
 
@@ -13,7 +13,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Setup base
 ARG UPTIME_KUMA_VERSION="2.5.5"
-ARG CLOUDFLARED_VERSION="2026.9.3"
+ARG CLOUDFLARED_VERSION="2026.10.0"
 ARG BUILD_ARCH=amd64
 # hadolint ignore=DL3003,DL3042
 RUN \

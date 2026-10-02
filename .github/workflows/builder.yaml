@@ -1,0 +1,131 @@
+---
+name: Upstream Sync and Build
+# yamllint disable-line rule:truthy
+on:
+  schedule:
+    - cron: 0 0 * * * # Run once every day at midnight to check for updates
+  workflow_dispatch: # Allows you to manually click "Run workflow" anytime
+jobs:
+  sync-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: 📂 Checkout Your Forked Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Pull full history to perform a proper git merge
+      - name: 🔄 Configure Git Credentials
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41182845+github-actions[bot]@users.noreply.github.com"
+      - name: 🔍 Add Upstream Remote and Fetch
+        run: |
+          # Connect Frenck's repo as the official "upstream" source code node
+          git remote add upstream https://github.com/hassio-addons/app-uptime-kuma
+          git fetch upstream main
+      - name: 🔀 Merge Upstream Code Into Your Repository
+        id: merge_step
+        run: |
+          # Capture the commit fingerprint BEFORE attempting to pull down changes
+          BEFORE_SHA=$(git rev-parse HEAD)
+          echo "Attempting to merge upstream/main..."
+          # The "ours" strategy option dynamically resolves conflicts by favoring your config overrides
+          if git merge upstream/main -m "merge: Sync up to upstream stable codebase [skip ci]" -X ours; then
+              AFTER_SHA=$(git rev-parse HEAD)
+              if [ "$BEFORE_SHA" != "$AFTER_SHA" ]; then
+                  echo "New updates found and merged cleanly!"
+                  echo "has_updates=true" >> $GITHUB_OUTPUT
+              else
+                  echo "Already completely up to date with upstream."
+                  echo "has_updates=false" >> $GITHUB_OUTPUT
+              fi
+          else
+              echo "Fatal Git conflict encountered during automated codebase merge!"
+              exit 1
+          fi
+      - name: 🔍 Fetch Latest Upstream Stable Release Tag
+        id: upstream_version
+        uses: oprypin/find-latest-tag@v1
+        with:
+          repository: hassio-addons/app-uptime-kuma
+          releases-only: true
+      - name: Format tag
+        id: format_tag
+        run: |
+          echo "External repo version is ${{ steps.upstream_version.outputs.tag }}"
+          # Get the raw tag from the previous step
+          RAW_VERSION="${{ steps.upstream_version.outputs.tag }}"
+
+          # Strip the leading 'v' if it exists
+          CLEAN_VERSION="${RAW_VERSION#v}"
+
+          # Save it to the GitHub Actions output parameter
+          echo "tag=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
+      - name: 🏷️ Push Upstream Changes to main and a separate Dynamic Version Tag
+        run: |
+          VERSION_STRING="${{ steps.format_tag.outputs.tag }}"
+
+          # 1. Cleanly push the standard merged history back to origin main branch first
+          git push origin main
+
+          # 2. Bind the hard version string tag strictly onto this temporary commit
+          git tag -f "v$VERSION_STRING"
+
+          # 3. Push ONLY the tag to GitHub. This bypasses origin main branch completely!
+          git push origin "v$VERSION_STRING" --force
+      - name: Get current date
+        run: |
+          echo "CURRENT_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+      - name: Get build description
+        id: get_build_description
+        run: |
+          echo "description= Uptime Kuma Docker Socket ${{ steps.upstream_version.outputs.tag }}" >> $GITHUB_ENV
+      - name: Build HA addon Image
+        if:
+          steps.merge_step.outputs.has_updates == 'true' || github.event_name ==
+          'workflow_dispatch'
+        uses: home-assistant/builder/actions/build-image@2026.09.0
+        with:
+          arch: aarch64
+          context: ./uptime-kuma
+          image: ghcr.io/${{ github.repository_owner }}/uptime
+          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
+          push: true
+          cosign: false
+          build-args: |
+            BUILD_VERSION=${{ steps.format_tag.outputs.tag }}
+            BUILD_DATE=${{ env.CURRENT_DATE }}
+            BUILD_DESCRIPTION=${{ env.description }}
+            BUILD_NAME="Build for version ${{ steps.format_tag.outputs.tag }}"
+            BUILD_REF=${{ github.ref }}
+            BUILD_REPOSITORY=${{ github.repository }}
+          image-tags: |
+            latest
+            ${{ steps.format_tag.outputs.tag }}
+          version: ${{ steps.format_tag.outputs.tag }}
+      - name: 💾 Push Code Tracking Adjustments Natively
+        if: steps.merge_step.outputs.has_updates == 'true'
+        run: |
+          # Pushes the merged upstream repository files (including their updated Dockerfile) back to your GitHub repository
+          git push origin main
+      - name: 🏷️ Tag and Publish Native GitHub Release
+        if:
+          steps.merge_step.outputs.has_updates == 'true'  || github.event_name ==
+          'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.upstream_version.outputs.tag }}
+          body: |
+            ## Custom Build Sync Complete
+            Natively compiled against upstream stable version https://github.com/hassio-addons/app-uptime-kuma/releases/tag/${{ steps.upstream_version.outputs.tag }}.
+
+            ### Integrated Structural Components:
+            * Mapped host `/ssl/` certificate provisioning (`rootfs/etc/s6-overlay/`)
+            * Preserved UI options data configuration framework
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Leverages repository permissions cleanly
