@@ -25,6 +25,3 @@ else
     echo "Warning: Certificates not found in /ssl/. Operating without them."
 fi
 
-# Execute the actual container payload (handing off process control to Uptime Kuma)
-# Adjust this line to match how the upstream Frenck repository executes the app
-exec node server/server.js 

@@ -1,14 +1,14 @@
 ---
-name: Uptime Kuma Local
+name: "Uptime Kuma (Docker Socket)"
 version: dev
 slug: uptime
-description: It is a self-hosted monitoring tool like "Uptime Robot"
+description: Uptime monitoring tool based on Uptime Kuma
 url: https://github.com/hassio-addons/app-uptime-kuma
 webui: http://[HOST]:[PORT:3001]
 init: false
+image: "ghcr.io/rpetrina/uptime-kuma-docsock"
 arch:
   - aarch64
-  - amd64
 ports:
   3001/tcp: 3001
 watchdog: "http://[HOST]:[PORT:3001]"
