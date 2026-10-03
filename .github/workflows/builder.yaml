@@ -1,104 +1,86 @@
-name: Build and Sync Custom Add-on
+name: Upstream Sync and Build
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Runs once every day at midnight to scan for upstream updates
-  workflow_dispatch: # Allows you to manually click "Run workflow" in GitHub UI anytime
+    - cron: '0 0 * * *' # Run once every day at midnight to check for updates
+  workflow_dispatch: # Allows you to manually click "Run workflow" anytime
 
 jobs:
-  check-and-build:
+  sync-and-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: write
 
     steps:
-      - name: 📂 Checkout Source Code
+      - name: 📂 Checkout Your Forked Code
         uses: actions/checkout@v4
-
-      - name: 🔍 Fetch Latest Upstream Stable Release Tag
-        id: upstream_version
-        uses: oprypin/find-latest-tag@v1
         with:
-          repository: hassio-addons/app-uptime-kuma
-          releases-only: true
+          fetch-depth: 0 # Pull full history to perform a proper git merge
 
-      - name: Print tag
+      - name: 🔄 Configure Git Credentials
         run: |
-          echo "External repo version is ${{ steps.upstream_version.outputs.tag }}"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41182845+github-actions[bot]@users.noreply.github.com"
 
-      - name: 🏷️ Compare Against Cached Version Tag
-        id: check_update
+      - name: 🔍 Add Upstream Remote and Fetch
         run: |
-          # Read local track file if it exists, otherwise treat as brand new build
-          LOCAL_VERSION_FILE=".upstream_version_cache"
-          LOCAL_TAG=""
-          if [ -f "$LOCAL_VERSION_FILE" ]; then
-            LOCAL_TAG=$(cat "$LOCAL_VERSION_FILE")
-          fi
+          # Connect Frenck's repo as the official "upstream" source code node
+          git remote add upstream https://github.com
+          git fetch upstream main
+
+      - name: 🔀 Merge Upstream Code Into Your Repository
+        id: merge_step
+        run: |
+          # Capture the commit fingerprint BEFORE attempting to pull down changes
+          BEFORE_SHA=$(git rev-parse HEAD)
           
-          UPSTREAM_TAG="${{ steps.upstream_version.outputs.tag }}"
-          
-          if [ "$LOCAL_TAG" == "$UPSTREAM_TAG" ]; then
-            echo "No new stable deployment found upstream ($UPSTREAM_TAG). Skipping build."
-            echo "should_build=false" >> $GITHUB_OUTPUT
+          echo "Attempting to merge upstream/main..."
+          # The "ours" strategy option dynamically resolves conflicts by favoring your config overrides
+          if git merge upstream/main -m "merge: Sync up to upstream stable codebase [skip ci]" -X ours; then
+              AFTER_SHA=$(git rev-parse HEAD)
+              if [ "$BEFORE_SHA" != "$AFTER_SHA" ]; then
+                  echo "New updates found and merged cleanly!"
+                  echo "has_updates=true" >> $GITHUB_OUTPUT
+              else
+                  echo "Already completely up to date with upstream."
+                  echo "has_updates=false" >> $GITHUB_OUTPUT
+              fi
           else
-            echo "New upstream stable deployment found ($UPSTREAM_TAG)! Starting build..."
-            echo "should_build=true" >> $GITHUB_OUTPUT
+              echo "Fatal Git conflict encountered during automated codebase merge!"
+              exit 1
           fi
 
-      - name: 🔧 Set up QEMU (For Multi-Arch Support)
-        if: steps.check_update.outputs.should_build == 'true'
+      - name: 🔧 Set up QEMU (For Multi-Arch Container Builds)
+        if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/setup-qemu-action@v3
 
       - name: 🐳 Set up Docker Buildx
-        if: steps.check_update.outputs.should_build == 'true'
+        if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/setup-buildx-action@v3
 
       - name: 🔐 Log in to GitHub Container Registry
-        if: steps.check_update.outputs.should_build == 'true'
+        if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🚀 Build and Push Add-on Image
-        if: steps.check_update.outputs.should_build == 'true'
+      - name: 🚀 Compile and Deploy Container Images
+        if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
-          context: ./uptime-kuma   # Point this to where your Dockerfile lives
+          context: ./uptime-kuma   
           platforms: linux/amd64,linux/arm64
           push: false #Temporary
           tags: |
             ghcr.io/${{ github.repository_owner }}/uptime-kuma-docsock:latest
-            ghcr.io/${{ github.repository_owner }}/uptime-kuma-docsock:${{ steps.upstream_version.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: 💾 Update Local Version Cache File
-        if: steps.check_update.outputs.should_build == 'true'
+      - name: 💾 Push Code Tracking Adjustments Natively
+        if: steps.merge_step.outputs.has_updates == 'true'
         run: |
-          # Save the newly built version tag so the next cron run knows it's processed
-          UPSTREAM_TAG="${{ steps.upstream_version.outputs.tag }}"
-          echo "$UPSTREAM_TAG" > .upstream_version_cache
-          
-          # Commit the tracker file back to your repo to persist the check state
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41182845+github-actions[bot]@users.noreply.github.com"
-          git add .upstream_version_cache
-          git commit -m "chore: Sync upstream tag reference to $UPSTREAM_TAG [skip ci]"
-          git push
-
-      - name: 📢 Force Home Assistant Add-on Config Version Bump
-        if: steps.check_update.outputs.should_build == 'true'
-        run: |
-          # Use yq or sed to quickly rewrite the version string in your config.yaml
-          # This forces your Home Assistant instance to see the "Update" button!
-          UPSTREAM_TAG="${{ steps.upstream_version.outputs.tag }}"
-          sed -i "s/^version:.*/version: \"$UPSTREAM_TAG\"/" ./uptime-kuma/config.yaml
-          
-          git add ./uptime-kuma/config.yaml
-          git commit -m "bump: Version updated to match upstream stable $UPSTREAM_TAG"
-          #Temporary git push
-
+          # Pushes the merged upstream repository files (including their updated Dockerfile) back to your GitHub repository
+          git push origin main
