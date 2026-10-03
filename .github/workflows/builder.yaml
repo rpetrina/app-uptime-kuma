@@ -73,6 +73,21 @@ jobs:
           # Save it to the GitHub Actions output parameter
           echo "tag=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
 
+      - name: 🔧 Temporarily Inject Version Into Workspace Only (No Git Push)
+        if: steps.merge_step.outputs.has_updates == 'true'
+        run: |
+          # Mutate the file ONLY locally inside the runner sandbox environment
+          VERSION_STRING="\${{ steps.format_tag.outputs.tag }}"
+          sed -i "s/^version:.*/version: \"\$VERSION_STRING\"/" ./uptime-kuma/config.yaml
+          
+          # Create a separate build asset bundle specifically for the release page
+          mkdir -p ./release-package/uptime-kuma
+          cp -r ./uptime-kuma/* ./release-package/uptime-kuma/
+          
+          # Compress just the add-on folder structure into a standalone zip file
+          cd release-package
+          zip -r ../addon-metadata.zip ./*
+          cd ..
 
       - name: 🔧 Set up QEMU (For Multi-Arch Container Builds)
         if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
@@ -90,12 +105,27 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get current date
+        run: echo "CURRENT_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+      
+      - name: Get build description
+        id: get_build_description
+        run: |
+          echo "description= Uptime Kuma Docker Socket {{ steps.upstream_version.outputs.tag }}" >> $GITHUB_ENV
+
       - name: 🚀 Compile and Deploy Container Images
         if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
           context: ./uptime-kuma   
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/arm64
+          build-args: |
+            BUILD_VERSION=${{ steps.format_tag.outputs.tag }}
+            BUILD_DATE=${{ env.CURRENT_DATE }}
+            BUILD_DESCRIPTION=${{ env.description }}
+            BUILD_NAME="Build for version ${{ steps.format_tag.outputs.tag }}"
+            BUILD_REF=${{ github.ref }}
+            BUILD_REPOSITORY=${{ github.repository }}
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/uptime-kuma-docsock:latest
@@ -108,3 +138,22 @@ jobs:
         run: |
           # Pushes the merged upstream repository files (including their updated Dockerfile) back to your GitHub repository
           git push origin main
+
+      - name: 🏷️ Tag and Publish Native GitHub Release
+        if: steps.merge_step.outputs.has_updates == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: \${{ steps.get_version.outputs.version }}
+          name: "Release \${{ steps.get_version.outputs.version }}"
+          body: |
+            ## Custom Build Sync Complete
+            Natively compiled against upstream stable version `${{ steps.get_version.outputs.version }}`.
+            
+            ### Integrated Structural Components:
+            * Mapped host `/ssl/` certificate provisioning (`rootfs/etc/s6-overlay/`)
+            * Preserved UI options data configuration framework
+          files: ./addon-metadata.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }} # Leverages repository permissions cleanly
