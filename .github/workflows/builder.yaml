@@ -141,11 +141,10 @@ jobs:
         if: steps.merge_step.outputs.has_updates == 'true'  || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.get_version.outputs.version }}
-          name: "Release ${{ steps.get_version.outputs.version }}"
+          tag_name: "${{ steps.upstream_version.outputs.tag }}"
           body: |
             ## Custom Build Sync Complete
-            Natively compiled against upstream stable version `${{ steps.get_version.outputs.version }}`.
+            Natively compiled against upstream stable version https://github.com/hassio-addons/app-uptime-kuma/releases/tag/`${{ steps.upstream_version.outputs.tag }}`.
             
             ### Integrated Structural Components:
             * Mapped host `/ssl/` certificate provisioning (`rootfs/etc/s6-overlay/`)
