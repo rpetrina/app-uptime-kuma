@@ -71,20 +71,25 @@ jobs:
           # Save it to the GitHub Actions output parameter
           echo "tag=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
 
-      - name: 🔧 Temporarily Inject Version Into Workspace Only (No Git Push)
+      - name: 🏷️ Build and Push Dynamic Version Tag Only
         run: |
           # Mutate the file ONLY locally inside the runner sandbox environment
-          VERSION_STRING="\${{ steps.format_tag.outputs.tag }}"
-          sed -i "s/^version:.*/version: \"\$VERSION_STRING\"/" ./uptime-kuma/config.yaml
+          VERSION_STRING="${{ steps.format_tag.outputs.tag }}"
+
+          # 1. Cleanly push the standard merged history back to origin main branch first
+          git push origin main
+
+          # 2. Update the version string in the config.yaml file
+          sed -i "s/^version:.*/version: $VERSION_STRING/" ./uptime-kuma/config.yaml
+
+          # 3. Create a detached Git commit representing the version bump
+          git commit -am "release: Injected version $VERSION_STRING for Home Assistant discovery"
+    
+          # 4. Bind the hard version string tag strictly onto this temporary commit
+          git tag -f "$VERSION_STRING"
           
-          # Create a separate build asset bundle specifically for the release page
-          mkdir -p ./release-package/uptime-kuma
-          cp -r ./uptime-kuma/* ./release-package/uptime-kuma/
-          
-          # Compress just the add-on folder structure into a standalone zip file
-          cd release-package
-          zip -r ../addon-metadata.zip ./*
-          cd ..
+          # 5. Push ONLY the tag to GitHub. This bypasses origin main branch completely!
+          git push origin "$VERSION_STRING" --force
 
       - name: 🔧 Set up QEMU (For Multi-Arch Container Builds)
         if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
@@ -109,7 +114,7 @@ jobs:
       - name: Get build description
         id: get_build_description
         run: |
-          echo "description= Uptime Kuma Docker Socket {{ steps.upstream_version.outputs.tag }}" >> $GITHUB_ENV
+          echo "description= Uptime Kuma Docker Socket ${{ steps.upstream_version.outputs.tag }}" >> $GITHUB_ENV
 
       - name: 🚀 Compile and Deploy Container Images
         if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
@@ -144,14 +149,13 @@ jobs:
           tag_name: "${{ steps.upstream_version.outputs.tag }}"
           body: |
             ## Custom Build Sync Complete
-            Natively compiled against upstream stable version https://github.com/hassio-addons/app-uptime-kuma/releases/tag/`${{ steps.upstream_version.outputs.tag }}`.
+            Natively compiled against upstream stable version https://github.com/hassio-addons/app-uptime-kuma/releases/tag/${{ steps.upstream_version.outputs.tag }}.
             
             ### Integrated Structural Components:
             * Mapped host `/ssl/` certificate provisioning (`rootfs/etc/s6-overlay/`)
             * Preserved UI options data configuration framework
-          files: ./addon-metadata.zip
           draft: false
           prerelease: false
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }} # Leverages repository permissions cleanly
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" # Leverages repository permissions cleanly
