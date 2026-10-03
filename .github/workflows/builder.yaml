@@ -18,17 +18,14 @@ jobs:
 
       - name: 🔍 Fetch Latest Upstream Stable Release Tag
         id: upstream_version
+        uses: oprypin/find-latest-tag@v1
+        with:
+          repository: hassio-addons/app-uptime-kuma
+          releases-only: true
+
+      - name: Print tag
         run: |
-          # Query GitHub API for the latest stable tag on Frenck's repo
-          UPSTREAM_TAG=$(curl -s "https://github.com" | jq -r '.tag_name')
-          
-          if [ "$UPSTREAM_TAG" == "null" ] || [ -z "$UPSTREAM_TAG" ]; then
-            echo "Error fetching upstream release data."
-            exit 1
-          fi
-          
-          echo "Latest Upstream Version Found: $UPSTREAM_TAG"
-          echo "version=$UPSTREAM_TAG" >> $GITHUB_OUTPUT
+          echo "External repo version is ${{ steps.upstream_version.outputs.tag }}"
 
       - name: 🏷️ Compare Against Cached Version Tag
         id: check_update
@@ -40,7 +37,7 @@ jobs:
             LOCAL_TAG=$(cat "$LOCAL_VERSION_FILE")
           fi
           
-          UPSTREAM_TAG="${{ steps.upstream_version.outputs.version }}"
+          UPSTREAM_TAG="${{ steps.upstream_version.outputs.tag }}"
           
           if [ "$LOCAL_TAG" == "$UPSTREAM_TAG" ]; then
             echo "No new stable deployment found upstream ($UPSTREAM_TAG). Skipping build."
@@ -75,7 +72,7 @@ jobs:
           push: false #Temporary
           tags: |
             ghcr.io/${{ github.repository_owner }}/uptime-kuma-docsock:latest
-            ghcr.io/${{ github.repository_owner }}/uptime-kuma-docsock:${{ steps.upstream_version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/uptime-kuma-docsock:${{ steps.upstream_version.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -83,7 +80,7 @@ jobs:
         if: steps.check_update.outputs.should_build == 'true'
         run: |
           # Save the newly built version tag so the next cron run knows it's processed
-          UPSTREAM_TAG="${{ steps.upstream_version.outputs.version }}"
+          UPSTREAM_TAG="${{ steps.upstream_version.outputs.tag }}"
           echo "$UPSTREAM_TAG" > .upstream_version_cache
           
           # Commit the tracker file back to your repo to persist the check state
@@ -98,7 +95,7 @@ jobs:
         run: |
           # Use yq or sed to quickly rewrite the version string in your config.yaml
           # This forces your Home Assistant instance to see the "Update" button!
-          UPSTREAM_TAG="${{ steps.upstream_version.outputs.version }}"
+          UPSTREAM_TAG="${{ steps.upstream_version.outputs.tag }}"
           sed -i "s/^version:.*/version: \"$UPSTREAM_TAG\"/" ./uptime-kuma/config.yaml
           
           git add ./uptime-kuma/config.yaml
