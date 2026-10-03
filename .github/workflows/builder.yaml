@@ -83,13 +83,13 @@ jobs:
           sed -i "s/^version:.*/version: $VERSION_STRING/" ./uptime-kuma/config.yaml
 
           # 3. Create a detached Git commit representing the version bump
-          git commit -am "release: Injected version $VERSION_STRING for Home Assistant discovery"
+          git commit -am "release: Injected version v$VERSION_STRING for Home Assistant discovery"
     
           # 4. Bind the hard version string tag strictly onto this temporary commit
-          git tag -f "$VERSION_STRING"
+          git tag -f "v$VERSION_STRING"
           
           # 5. Push ONLY the tag to GitHub. This bypasses origin main branch completely!
-          git push origin "$VERSION_STRING" --force
+          git push origin "v$VERSION_STRING" --force
 
       - name: 🔧 Set up QEMU (For Multi-Arch Container Builds)
         if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
