@@ -52,7 +52,6 @@ jobs:
           fi
       
       - name: 🔍 Fetch Latest Upstream Stable Release Tag
-        if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
         id: upstream_version
         uses: oprypin/find-latest-tag@v1
         with:
@@ -61,7 +60,6 @@ jobs:
 
       - name: Format tag
         id: format_tag
-        if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           echo "External repo version is ${{ steps.upstream_version.outputs.tag }}"
           # Get the raw tag from the previous step
@@ -74,7 +72,6 @@ jobs:
           echo "tag=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
 
       - name: 🔧 Temporarily Inject Version Into Workspace Only (No Git Push)
-        if: steps.merge_step.outputs.has_updates == 'true'
         run: |
           # Mutate the file ONLY locally inside the runner sandbox environment
           VERSION_STRING="\${{ steps.format_tag.outputs.tag }}"
@@ -106,7 +103,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get current date
-        run: echo "CURRENT_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+        run: |
+          echo "CURRENT_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
       
       - name: Get build description
         id: get_build_description
@@ -140,7 +138,7 @@ jobs:
           git push origin main
 
       - name: 🏷️ Tag and Publish Native GitHub Release
-        if: steps.merge_step.outputs.has_updates == 'true'
+        if: steps.merge_step.outputs.has_updates == 'true'  || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: \${{ steps.get_version.outputs.version }}
