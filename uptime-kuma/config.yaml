@@ -1,6 +1,6 @@
 ---
 name: "Uptime Kuma (Docker Socket)"
-version: latest
+version: dev
 slug: uptime
 description: Uptime monitoring tool based on Uptime Kuma
 url: https://github.com/hassio-addons/app-uptime-kuma

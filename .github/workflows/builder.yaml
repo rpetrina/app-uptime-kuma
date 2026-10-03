@@ -59,10 +59,20 @@ jobs:
           repository: hassio-addons/app-uptime-kuma
           releases-only: true
 
-      - name: Print tag
+      - name: Format tag
+        id: format_tag
         if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           echo "External repo version is ${{ steps.upstream_version.outputs.tag }}"
+          # Get the raw tag from the previous step
+          RAW_VERSION="${{ steps.upstream_version.outputs.tag }}"
+          
+          # Strip the leading 'v' if it exists
+          CLEAN_VERSION="${RAW_VERSION#v}"
+          
+          # Save it to the GitHub Actions output parameter
+          echo "tag=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
+
 
       - name: 🔧 Set up QEMU (For Multi-Arch Container Builds)
         if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
@@ -89,7 +99,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/uptime-kuma-docsock:latest
-            ghcr.io/${{ github.repository_owner }}/uptime-kuma:${{ steps.upstream_version.outputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/uptime-kuma-docsock:${{ steps.format_tag.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
