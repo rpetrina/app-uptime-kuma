@@ -50,6 +50,19 @@ jobs:
               echo "Fatal Git conflict encountered during automated codebase merge!"
               exit 1
           fi
+      
+      - name: 🔍 Fetch Latest Upstream Stable Release Tag
+        if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
+        id: upstream_version
+        uses: oprypin/find-latest-tag@v1
+        with:
+          repository: hassio-addons/app-uptime-kuma
+          releases-only: true
+
+      - name: Print tag
+        if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          echo "External repo version is ${{ steps.upstream_version.outputs.tag }}"
 
       - name: 🔧 Set up QEMU (For Multi-Arch Container Builds)
         if: steps.merge_step.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
@@ -76,6 +89,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/uptime-kuma-docsock:latest
+            ghcr.io/${{ github.repository_owner }}/uptime-kuma:${{ steps.upstream_version.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
