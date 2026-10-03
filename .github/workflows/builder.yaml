@@ -73,22 +73,15 @@ jobs:
 
       - name: 🏷️ Build and Push Dynamic Version Tag Only
         run: |
-          # Mutate the file ONLY locally inside the runner sandbox environment
           VERSION_STRING="${{ steps.format_tag.outputs.tag }}"
 
           # 1. Cleanly push the standard merged history back to origin main branch first
           git push origin main
-
-          # 2. Update the version string in the config.yaml file
-          sed -i "s/^version:.*/version: $VERSION_STRING/" ./uptime-kuma/config.yaml
-
-          # 3. Create a detached Git commit representing the version bump
-          git commit -am "release: Injected version v$VERSION_STRING for Home Assistant discovery"
     
-          # 4. Bind the hard version string tag strictly onto this temporary commit
+          # 2. Bind the hard version string tag strictly onto this temporary commit
           git tag -f "v$VERSION_STRING"
           
-          # 5. Push ONLY the tag to GitHub. This bypasses origin main branch completely!
+          # 3. Push ONLY the tag to GitHub. This bypasses origin main branch completely!
           git push origin "v$VERSION_STRING" --force
 
       - name: 🔧 Set up QEMU (For Multi-Arch Container Builds)
@@ -121,7 +114,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./uptime-kuma   
-          platforms: linux/arm64
+          platforms: linux/amd64,linux/arm64
           build-args: |
             BUILD_VERSION=${{ steps.format_tag.outputs.tag }}
             BUILD_DATE=${{ env.CURRENT_DATE }}
