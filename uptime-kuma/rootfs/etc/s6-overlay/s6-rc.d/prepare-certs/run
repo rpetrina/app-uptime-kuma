@@ -9,7 +9,7 @@
 bashio::log.info "Configuring runtime certificates..."
 
 # 1. Grab the secret hostname from the Home Assistant UI text box
-SERVER_HOSTNAMES=$(bashio::config 'SERVER_HOSTNAMES')
+SERVER_HOSTNAMES=($(bashio::config 'SERVER_HOSTNAMES' | jq -r '.[]'))
 
 # Check if the user actually filled it out
 if [ -z "$SERVER_HOSTNAMES" ]; then
@@ -20,20 +20,19 @@ else
 fi
 
 bashio::log.info "Configuring certificates for servers: $SERVER_HOSTNAMES"
-
-bashio::config 'SERVER_HOSTNAMES' | while read -r HOSTNAME; do
+for HOSTNAME in "${SERVER_HOSTNAMES[@]}"; do
     bashio::log.info "Configuring certificates dir for server: $HOSTNAME"
     # Internal paths where your app looks for certificates
-    if mkdir -p "$DOCKER_TLS_DIR_PATH/$HOSTNAME"; then
-        bashio::log.info "Directory created"
+    if mkdir -p "$DOCKER_TLS_DIR_PATH"; then
+        bashio::log.info "Docker TLS Directory created"
     else
-        bashio::log.error "Couldn't create certificate dir(s)"
+        bashio::log.error "Couldn't create Docker certificate dir"
     fi
 
     bashio::log.info "Copying certificates into the container for server: $HOSTNAME"
     # Copy or Symlink the files from the secure Home Assistant /ssl share
     if [ -f "/ssl/uptime_kuma/$HOSTNAME/cert.pem" ]; then
-        cp -r "/ssl/uptime_kuma/$HOSTNAME" "$DOCKER_TLS_DIR_PATH/$HOSTNAME"
+        cp -r "/ssl/uptime_kuma/$HOSTNAME" "$DOCKER_TLS_DIR_PATH/"
         ls -al "$DOCKER_TLS_DIR_PATH/$HOSTNAME"
         bashio::log.info "Certificates successfully injected at runtime for host $HOSTNAME"
     else
