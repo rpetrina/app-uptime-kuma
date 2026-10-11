@@ -16,12 +16,12 @@ if [ -z "$SERVER_HOSTNAMES" ]; then
     bashio::log.error "Error: 'SERVER_HOSTNAMES' is missing in the add-on Configuration UI!"
     exit 1
 else
-    bashio::log.info "Server hostname are: $SERVER_HOSTNAMES"
+    bashio::log.info "Server hostname(s) are: $SERVER_HOSTNAMES"
 fi
 
 bashio::log.info "Configuring certificates for servers: $SERVER_HOSTNAMES"
 
-$SERVER_HOSTNAMES | while read -r HOSTNAME; do
+bashio::config 'SERVER_HOSTNAMES' | while read -r HOSTNAME; do
     # Internal paths where your app looks for certificates
     if mkdir -p "$DOCKER_TLS_DIR_PATH/$HOSTNAME"; then
         bashio::log.info "Directory created"
