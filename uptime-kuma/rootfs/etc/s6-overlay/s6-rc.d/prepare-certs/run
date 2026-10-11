@@ -9,17 +9,18 @@
 bashio::log.info "Configuring runtime certificates..."
 
 # 1. Grab the secret hostname from the Home Assistant UI text box
-SERVER_HOSTNAMES=($(bashio::config 'SERVER_HOSTNAMES' | jq -r '.[]'))
+mapfile -t SERVER_HOSTNAMES < <(bashio::config 'SERVER_HOSTNAMES')
 
-# Check if the user actually filled it out
-if [ -z "$SERVER_HOSTNAMES" ]; then
+# Check if the user actually filled the string
+ALL_HOSTNAMES="${SERVER_HOSTNAMES[*]}"
+if [ -z "$ALL_HOSTNAMES" ]; then
     bashio::log.error "Error: 'SERVER_HOSTNAMES' is missing in the add-on Configuration UI!"
     exit 1
 else
-    bashio::log.info "Server hostname(s) are: $SERVER_HOSTNAMES"
+    bashio::log.info "Server hostname(s) are: $ALL_HOSTNAMES"
 fi
 
-bashio::log.info "Configuring certificates for servers: $SERVER_HOSTNAMES"
+bashio::log.info "Configuring certificates for servers: $ALL_HOSTNAMES"
 for HOSTNAME in "${SERVER_HOSTNAMES[@]}"; do
     bashio::log.info "Configuring certificates dir for server: $HOSTNAME"
     # Internal paths where your app looks for certificates
