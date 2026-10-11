@@ -1,0 +1,36 @@
+#!/usr/bin/with-contenv bashio
+# The line above allows you to use Home Assistant's native bashio library if needed
+# shellcheck shell=bash
+# ==============================================================================
+# Home Assistant Community App: Uptime Kuma
+# Sends discovery information to Home Assistant.
+# ==============================================================================
+
+bashio::log.info "Configuring runtime certificates..."
+
+# 1. Grab the secret hostname from the Home Assistant UI text box
+SERVER_HOSTNAME=$(bashio::config 'SERVER_HOSTNAME')
+
+# Check if the user actually filled it out
+if [ -z "$SERVER_HOSTNAME" ]; then
+    bashio::log.error "Error: 'SERVER_HOSTNAME' is missing in the add-on Configuration UI!"
+    exit 1
+else
+    bashio::log.info "Server hostname is: $SERVER_HOSTNAME"
+fi
+
+bashio::log.info "Configuring certificates for server: $SERVER_HOSTNAME"
+
+# Internal paths where your app looks for certificates
+if mkdir -p "$DOCKER_TLS_DIR_PATH/$SERVER_HOSTNAME"; then
+    bashio::log.info "Directory created"
+
+# Copy or Symlink the files from the secure Home Assistant /ssl share
+if [ -f "/ssl/uptime_kuma/$SERVER_HOSTNAME/cert.pem" ]; then
+    cp -r "/ssl/uptime_kuma/$SERVER_HOSTNAME" "$DOCKER_TLS_DIR_PATH/$SERVER_HOSTNAME"
+    ls -al "$DOCKER_TLS_DIR_PATH/$SERVER_HOSTNAME"
+    bashio::log.info "Certificates successfully injected at runtime."
+else
+    bashio::log.warning "Certificates not found in /ssl/. Operating without them."
+fi
+
