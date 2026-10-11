@@ -24,6 +24,9 @@ bashio::log.info "Configuring certificates for server: $SERVER_HOSTNAME"
 # Internal paths where your app looks for certificates
 if mkdir -p "$DOCKER_TLS_DIR_PATH/$SERVER_HOSTNAME"; then
     bashio::log.info "Directory created"
+else
+    bashio::log.error "Couldn't create certificate dir(s)"
+fi
 
 # Copy or Symlink the files from the secure Home Assistant /ssl share
 if [ -f "/ssl/uptime_kuma/$SERVER_HOSTNAME/cert.pem" ]; then
