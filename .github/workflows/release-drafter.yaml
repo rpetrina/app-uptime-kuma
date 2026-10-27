@@ -33,6 +33,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0 # Pull full history to perform a proper git merge
+          token: ${{ secrets.UPDATER_TOKEN }}
       - name: 🔄 Configure Git Credentials
         run: |
           git config --global user.name "github-actions[bot]"
